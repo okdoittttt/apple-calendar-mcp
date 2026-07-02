@@ -370,7 +370,11 @@ class EventKitStore:
             self._store.fetchRemindersMatchingPredicate_completion_(
                 predicate, fetch_callback
             )
-            semaphore.acquire(timeout=30)
+            if not semaphore.acquire(timeout=30):
+                raise Exception(
+                    "Timed out waiting for EventKit to return reminders "
+                    "(fetchRemindersMatchingPredicate:completion: never called back)"
+                )
 
             results = [self._reminder_to_dict(r) for r in reminders_result]
 
@@ -731,6 +735,10 @@ class EventKitStore:
             semaphore.release()
 
         self._store.fetchRemindersMatchingPredicate_completion_(predicate, callback)
-        semaphore.acquire(timeout=30)
+        if not semaphore.acquire(timeout=30):
+            raise Exception(
+                "Timed out waiting for EventKit to return reminders "
+                "(fetchRemindersMatchingPredicate:completion: never called back)"
+            )
 
         return result[0] if result else None
