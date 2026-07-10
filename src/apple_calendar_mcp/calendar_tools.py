@@ -197,6 +197,7 @@ def register_calendar_tools(mcp: FastMCP, store: EventKitStore) -> None:
         notes: Optional[str] = None,
         url: Optional[str] = None,
         tags: Optional[list[str]] = None,
+        calendar_name: Optional[str] = None,
     ) -> dict:
         """기존 캘린더 이벤트를 수정합니다.
 
@@ -210,6 +211,8 @@ def register_calendar_tools(mcp: FastMCP, store: EventKitStore) -> None:
             notes: 새 메모 (선택)
             url: 새 URL (선택)
             tags: 새 태그 - 기존 태그를 대체함 (선택)
+            calendar_name: 이벤트를 이동할 대상 캘린더(카테고리) 이름 (선택).
+                반복 이벤트는 캘린더 이동이 불가하며 에러를 반환합니다.
         """
         if span not in ("this_event", "future_events"):
             return {"success": False, "error": "invalid_span", "message": "span must be 'this_event' or 'future_events'"}
@@ -228,6 +231,7 @@ def register_calendar_tools(mcp: FastMCP, store: EventKitStore) -> None:
                 notes=notes,
                 url=url,
                 tags=tags,
+                calendar_name=calendar_name,
             )
 
             return {"success": True, "event": event, "message": "Event updated successfully"}

@@ -155,6 +155,7 @@ class EventKitStore:
         notes: Optional[str] = None,
         url: Optional[str] = None,
         tags: Optional[list[str]] = None,
+        calendar_name: Optional[str] = None,
     ) -> dict:
         """기존 이벤트를 수정합니다."""
         require_calendar_permission()
@@ -162,6 +163,18 @@ class EventKitStore:
             event = self._find_event_by_any_id(event_id)
             if not event:
                 raise ValueError(f"Event not found: {event_id}")
+
+            if calendar_name is not None:
+                # EventKit은 반복 이벤트의 캘린더 이동을 허용하지 않습니다.
+                if event.hasRecurrenceRules():
+                    raise ValueError(
+                        "Cannot move a recurring event to another calendar. "
+                        "Remove the recurrence first, or delete and recreate the event."
+                    )
+                cal = self._find_calendar_unlocked(calendar_name)
+                if cal is None:
+                    raise ValueError(f"Calendar not found: {calendar_name}")
+                event.setCalendar_(cal)
 
             if title is not None:
                 event.setTitle_(title)
