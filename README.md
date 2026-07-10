@@ -93,7 +93,7 @@ Restart Claude Desktop (or use `server_restart`, see below) after editing.
 | `calendar_get_event` | Get one event by id |
 | `calendar_search_events` | Text search over title/location/notes, optional tag filter |
 | `calendar_create_event` | Create an event (location, notes, url, tags) |
-| `calendar_edit_event` | Edit an event; `span` required for recurring events |
+| `calendar_edit_event` | Edit an event (incl. moving categories via `calendar_name`); `span` required for recurring events |
 | `calendar_delete_event` | Delete an event; `span` required for recurring events |
 
 ### Reminders
