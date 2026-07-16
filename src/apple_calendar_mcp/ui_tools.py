@@ -9,8 +9,13 @@ provider(`AppleCalendarUI`) 아래 묶여 있습니다.
 
 제공 UI:
   1. event_composer : 새 일정 등록 폼. 제출 시 create_event_from_form 호출.
-  2. agenda_board   : 지정 기간(기본=오늘)의 이벤트 + 마감 미리 알림 요약 보드
-                      (읽기 전용, 메트릭 카드 + 검색/정렬 가능한 DataTable).
+  2. agenda_board   : 지정 기간(기본=오늘)의 이벤트 + 마감 미리 알림 관리 보드.
+                      메트릭 카드 + 읽기 전용 DataTable 로 요약하고, 표 아래에
+                      행별 액션 버튼을 '일반 흐름'(Row+Button)으로 제공합니다.
+                        - 미리 알림: [완료] → complete_reminder_from_board
+                        - 이벤트:    [삭제] → delete_event_from_board
+                      (표 셀에 컴포넌트를 넣으면 일부 호스트 렌더러에서 빈 화면이
+                       나므로, 버튼은 표 밖 일반 흐름에 둔다.)
 
 무손상 원칙: 기존 도구의 반환 타입(dict)은 전혀 바뀌지 않습니다. UI는
 FastMCPApp provider 하나로만 추가됩니다.
@@ -27,6 +32,7 @@ from prefab_ui.components import (
     Alert,
     AlertDescription,
     AlertTitle,
+    Button,
     Column,
     DataTable,
     DataTableColumn,
@@ -204,6 +210,49 @@ def register_ui_tools(mcp: FastMCP, store: EventKitStore) -> None:
         except Exception as e:  # noqa: BLE001 - 폼에 오류 메시지로 표시
             return {"success": False, "error": "unexpected_error", "message": str(e)}
 
+    # ── 보드 액션 백엔드 핸들러 (visibility=app) ──
+    @app.tool()
+    def complete_reminder_from_board(reminder_id: str) -> dict:
+        """보드의 [완료] 버튼이 호출하는 미리 알림 완료 처리(내부용).
+
+        agenda_board 의 미리 알림 행 버튼이 CallTool 로 호출합니다. 실제
+        완료 처리는 기존 EventKitStore.complete_reminder 에 위임합니다.
+        """
+        try:
+            reminder = store.complete_reminder(reminder_id)
+            return {
+                "success": True,
+                "reminder": reminder,
+                "message": "미리 알림을 완료 처리했습니다",
+            }
+        except PermissionError as e:
+            return {"success": False, "error": "permission_denied", "message": str(e)}
+        except ValueError as e:
+            return {"success": False, "error": "not_found", "message": str(e)}
+        except Exception as e:  # noqa: BLE001 - 토스트로 오류 표시
+            return {"success": False, "error": "unexpected_error", "message": str(e)}
+
+    @app.tool()
+    def delete_event_from_board(event_id: str) -> dict:
+        """보드의 [삭제] 버튼이 호출하는 이벤트 삭제(내부용).
+
+        agenda_board 의 이벤트 행 삭제 다이얼로그가 CallTool 로 호출합니다.
+        반복 이벤트는 해당 회차만(this_event) 삭제합니다.
+        """
+        try:
+            store.delete_event(event_id, span="this_event")
+            return {"success": True, "message": "일정을 삭제했습니다"}
+        except PermissionError as e:
+            return {"success": False, "error": "permission_denied", "message": str(e)}
+        except ValueError as e:
+            return {"success": False, "error": "not_found", "message": str(e)}
+        except Exception as e:  # noqa: BLE001 - 토스트로 오류 표시
+            return {"success": False, "error": "unexpected_error", "message": str(e)}
+
+    # 액션 버튼은 표 셀이 아니라 표 아래 '일반 흐름'(Row+Button)으로 렌더한다.
+    # 표 셀 값에 컴포넌트를 넣는 방식은 일부 호스트(구버전 Claude Desktop 렌더러)
+    # 에서 렌더 실패(빈 화면)를 일으켜서, 등록 폼과 동일하게 검증된 흐름만 쓴다.
+
     # ── 등록 폼 UI (visibility=model) ──
     @app.ui()
     def event_composer() -> Column:
@@ -265,6 +314,7 @@ def register_ui_tools(mcp: FastMCP, store: EventKitStore) -> None:
         except Exception as e:  # noqa: BLE001 - 보드에 안내로 표시
             error = str(e)
 
+        # 읽기 전용 표 행(문자열 셀만). 액션은 표 아래 별도 버튼으로 뺀다.
         event_rows = [_event_to_row(ev) for ev in events]
         reminder_rows = [_reminder_to_row(r) for r in reminders]
 
@@ -283,6 +333,7 @@ def register_ui_tools(mcp: FastMCP, store: EventKitStore) -> None:
                 Metric(label="이벤트", value=len(events))
                 Metric(label="마감 미리 알림", value=len(reminders))
 
+            # ── 이벤트: 읽기 전용 표 + 행별 [삭제] 버튼(표 아래 일반 흐름) ──
             Heading("이벤트", level=3)
             if event_rows:
                 DataTable(
@@ -292,9 +343,29 @@ def register_ui_tools(mcp: FastMCP, store: EventKitStore) -> None:
                     paginated=len(event_rows) > 15,
                     page_size=15,
                 )
+                with Column(gap=2):
+                    for ev, row in zip(events, event_rows):
+                        eid = ev.get("id")
+                        if not eid:
+                            continue
+                        with Row(gap=3):
+                            Text(f"{row['time']} · {row['title']}")
+                            Button(
+                                "삭제",
+                                variant="destructive",
+                                size="sm",
+                                on_click=CallTool(
+                                    delete_event_from_board,
+                                    arguments={"event_id": eid},
+                                    on_success=ShowToast(
+                                        "일정을 삭제했습니다 🗑️", variant="success"
+                                    ),
+                                ),
+                            )
             else:
                 Text("이 기간에 이벤트가 없습니다.")
 
+            # ── 미리 알림: 읽기 전용 표 + 행별 [완료] 버튼 ──
             Heading("마감 미리 알림", level=3)
             if reminder_rows:
                 DataTable(
@@ -302,6 +373,25 @@ def register_ui_tools(mcp: FastMCP, store: EventKitStore) -> None:
                     rows=reminder_rows,
                     search=len(reminder_rows) > 5,
                 )
+                with Column(gap=2):
+                    for r, row in zip(reminders, reminder_rows):
+                        rid = r.get("id")
+                        if not rid:
+                            continue
+                        with Row(gap=3):
+                            Text(row["title"])
+                            Button(
+                                "완료",
+                                variant="success",
+                                size="sm",
+                                on_click=CallTool(
+                                    complete_reminder_from_board,
+                                    arguments={"reminder_id": rid},
+                                    on_success=ShowToast(
+                                        "완료 처리했습니다 ✅", variant="success"
+                                    ),
+                                ),
+                            )
             else:
                 Text("이 기간에 마감 예정인 미리 알림이 없습니다.")
 
