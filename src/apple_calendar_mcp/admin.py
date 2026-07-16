@@ -14,7 +14,7 @@ import sys
 import threading
 import time as _time
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from . import __version__
 
