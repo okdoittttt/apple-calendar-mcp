@@ -5,7 +5,7 @@ description = "Personal MCP server for Apple Calendar and Reminders via EventKit
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "fastmcp>=3.4.4",
+    "fastmcp[apps]>=3.4.4",
     "pyobjc-framework-EventKit>=10.0",
     "pyobjc-framework-Cocoa>=10.0",
 ]

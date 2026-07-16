@@ -8,6 +8,7 @@ from .reminder_tools import register_reminder_tools
 from .tag_tools import register_tag_tools
 from .extras import register_extra_tools
 from .admin import register_admin_tools
+from .ui_tools import register_ui_tools
 from .permissions import check_permissions
 
 
@@ -33,6 +34,7 @@ register_reminder_tools(mcp, store)
 register_tag_tools(mcp, store)
 register_extra_tools(mcp, store)
 register_admin_tools(mcp)
+register_ui_tools(mcp, store)
 
 
 def main():
