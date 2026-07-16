@@ -28,3 +28,18 @@ path = ".venv"
 
 [tool.uv]
 package = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "requires_calendar: 실제 Calendar 권한이 있어야 실행",
+    "requires_reminders: 실제 Reminders 권한이 있어야 실행",
+    "write: 실제 데이터를 변경함. APPLE_CAL_MCP_WRITE_TESTS=1 일 때만 실행",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
