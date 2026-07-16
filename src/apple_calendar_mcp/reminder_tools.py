@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from .eventkit_store import EventKitStore
 from .permissions import PermissionError

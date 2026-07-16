@@ -1,6 +1,6 @@
 """apple-calendar MCP 서버 - MCP를 통해 Apple 캘린더와 미리 알림에 접근합니다."""
 
-from mcp.server.fastmcp import FastMCP
+from fastmcp import FastMCP
 
 from .eventkit_store import EventKitStore
 from .calendar_tools import register_calendar_tools
@@ -12,13 +12,7 @@ from .permissions import check_permissions
 
 
 # FastMCP 서버 초기화
-mcp = FastMCP(
-    "apple-calendar",
-    dependencies=[
-        "pyobjc-framework-EventKit",
-        "pyobjc-framework-Cocoa",
-    ]
-)
+mcp = FastMCP("apple-calendar")
 
 # EventKit 스토어 초기화 (싱글턴)
 store = EventKitStore()
