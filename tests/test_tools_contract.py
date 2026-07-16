@@ -7,6 +7,8 @@
     (span/scope/priority/working_hours/날짜범위 등은 권한과 무관하게 결정적)
 """
 
+import json
+
 import pytest
 
 from conftest import result_dict
@@ -30,13 +32,15 @@ EXPECTED_TOOLS = {
     "server_status", "server_restart", "server_stop",
     # permissions
     "eventkit_check_permissions",
+    # MCP App (UI) - 진입점 도구만 모델에 노출됨(제출 핸들러는 visibility=app 로 숨김)
+    "event_composer", "agenda_board",
 }
 
 
 class TestRegistry:
     async def test_tool_count(self, client):
         tools = await client.list_tools()
-        assert len(tools) == 28
+        assert len(tools) == 30
 
     async def test_tool_names_match(self, client):
         names = {t.name for t in await client.list_tools()}
@@ -59,9 +63,52 @@ class TestAlwaysAvailableTools:
     async def test_server_status_shape(self, client):
         data = result_dict(await client.call_tool("server_status", {}))
         assert data["success"] is True
-        assert data["tool_count"] == 28
+        assert data["tool_count"] == 30
         assert isinstance(data["pid"], int)
         assert "version" in data
+
+
+class TestMcpApp:
+    """MCP App(UI) 배선 검증 - event_composer 등록 폼.
+
+    실제 렌더링은 클라이언트(브라우저/호스트)가 하지만, 서버가 UI 리소스와
+    도구 호출 배선을 올바르게 '선언'하는지는 권한 없이도 결정적으로 검증할 수
+    있습니다. (계약 회귀 방지)
+    """
+
+    async def test_ui_tool_has_app_meta(self, client):
+        # event_composer 는 _meta.ui.resourceUri(렌더러) 가 스탬프되어 있어야 함
+        tool = next(t for t in await client.list_tools() if t.name == "event_composer")
+        assert tool.meta and "ui" in tool.meta
+        assert tool.meta["ui"]["resourceUri"].startswith("ui://")
+        assert tool.meta["fastmcp"]["app"] == "AppleCalendarUI"
+
+    async def test_submit_handler_hidden_from_model(self, client):
+        # 제출 핸들러(create_event_from_form)는 visibility=app 이라 모델 목록에 없어야 함
+        names = {t.name for t in await client.list_tools()}
+        assert "create_event_from_form" not in names
+
+    async def test_form_wires_submit_to_backend_tool(self, client):
+        # event_composer 를 호출하면 Prefab 폼이 나오고, 제출(onSubmit)이
+        # 백엔드 핸들러로 toolCall 되도록 배선되어 있어야 함
+        res = await client.call_tool("event_composer", {})
+        sc = res.structured_content
+        blob = json.dumps(sc, ensure_ascii=False)
+        assert "$prefab" in sc                # Prefab 앱 래퍼
+        assert '"Form"' in blob               # 폼 컴포넌트
+        assert "toolCall" in blob             # 제출 → 도구 호출 배선
+        assert "create_event_from_form" in blob  # 해시된 백엔드 도구명 포함
+
+    async def test_agenda_board_renders_without_permission(self, client):
+        # 읽기 보드는 권한이 없어도 크래시 없이 Prefab UI를 렌더해야 함
+        # (권한 없으면 데이터 대신 Alert 안내를 그림)
+        res = await client.call_tool("agenda_board", {})
+        sc = res.structured_content
+        assert "$prefab" in sc
+        blob = json.dumps(sc, ensure_ascii=False)
+        assert '"Metric"' in blob   # 요약 메트릭 카드
+        # 권한 유무와 무관하게: 데이터가 있으면 DataTable, 없으면 Alert/Text 중 하나
+        assert ('"DataTable"' in blob) or ('"Alert"' in blob) or ('"Text"' in blob)
 
 
 class TestInputValidation:
