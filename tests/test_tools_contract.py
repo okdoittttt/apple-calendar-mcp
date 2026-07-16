@@ -10,7 +10,9 @@
 import json
 
 import pytest
+from fastmcp import Client, FastMCP
 
+from apple_calendar_mcp.ui_tools import register_ui_tools
 from conftest import result_dict
 
 # 이 파일의 모든 테스트는 async
@@ -109,6 +111,56 @@ class TestMcpApp:
         assert '"Metric"' in blob   # 요약 메트릭 카드
         # 권한 유무와 무관하게: 데이터가 있으면 DataTable, 없으면 Alert/Text 중 하나
         assert ('"DataTable"' in blob) or ('"Alert"' in blob) or ('"Text"' in blob)
+
+    async def test_board_action_handlers_hidden_from_model(self, client):
+        # 보드 액션 백엔드(완료/삭제)는 visibility=app 이라 모델 목록에 없어야 함
+        names = {t.name for t in await client.list_tools()}
+        assert "complete_reminder_from_board" not in names
+        assert "delete_event_from_board" not in names
+
+
+class _FakeStore:
+    """권한/실데이터 없이 보드 액션 배선을 검증하기 위한 최소 스텁."""
+
+    def get_events(self, start, end, limit):
+        return [{
+            "id": "EVT-1", "title": "팀 회의",
+            "start_date": "2026-07-16T10:00:00", "end_date": "2026-07-16T11:00:00",
+            "location": "3층", "calendar": "업무", "is_all_day": False, "tags": ["work"],
+        }]
+
+    def get_reminders(self, due_after, due_before, include_completed, limit):
+        return [{
+            "id": "REM-1", "title": "보고서 제출",
+            "due_date": "2026-07-16T09:00:00", "priority": "high", "tags": [],
+        }]
+
+
+class TestBoardActionWiring:
+    """agenda_board 의 행별 액션 버튼 배선 검증 (가짜 store 로 데이터 주입).
+
+    실제 client 픽스처는 권한이 없어 행이 비어 버튼이 렌더되지 않으므로,
+    샘플 이벤트/미리 알림을 주는 _FakeStore 로 별도 서버를 띄워 검증한다.
+    """
+
+    async def test_rows_render_action_buttons_wired_to_handlers(self):
+        mcp = FastMCP("test-board")
+        register_ui_tools(mcp, _FakeStore())
+        async with Client(mcp) as client:
+            res = await client.call_tool("agenda_board", {"start_date": "2026-07-16"})
+            blob = json.dumps(res.structured_content, ensure_ascii=False)
+
+        # 액션 버튼은 표 셀이 아니라 표 아래 일반 흐름(Button)으로 렌더된다.
+        assert '"Button"' in blob
+        assert "toolCall" in blob
+        # 미리 알림 [완료] 버튼 → complete_reminder_from_board, id 인자 포함
+        assert "complete_reminder_from_board" in blob
+        assert "REM-1" in blob
+        # 이벤트 [삭제] 버튼 → delete_event_from_board, id 인자 포함
+        assert "delete_event_from_board" in blob
+        assert "EVT-1" in blob
+        # 표 셀에는 컴포넌트를 넣지 않는다(구버전 호스트 렌더러 호환) → Dialog 미사용
+        assert '"Dialog"' not in blob
 
 
 class TestInputValidation:
