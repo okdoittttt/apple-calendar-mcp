@@ -33,14 +33,14 @@ EXPECTED_TOOLS = {
     # permissions
     "eventkit_check_permissions",
     # MCP App (UI) - 진입점 도구만 모델에 노출됨(제출 핸들러는 visibility=app 로 숨김)
-    "event_composer",
+    "event_composer", "agenda_board",
 }
 
 
 class TestRegistry:
     async def test_tool_count(self, client):
         tools = await client.list_tools()
-        assert len(tools) == 29
+        assert len(tools) == 30
 
     async def test_tool_names_match(self, client):
         names = {t.name for t in await client.list_tools()}
@@ -63,7 +63,7 @@ class TestAlwaysAvailableTools:
     async def test_server_status_shape(self, client):
         data = result_dict(await client.call_tool("server_status", {}))
         assert data["success"] is True
-        assert data["tool_count"] == 29
+        assert data["tool_count"] == 30
         assert isinstance(data["pid"], int)
         assert "version" in data
 
@@ -81,7 +81,7 @@ class TestMcpApp:
         tool = next(t for t in await client.list_tools() if t.name == "event_composer")
         assert tool.meta and "ui" in tool.meta
         assert tool.meta["ui"]["resourceUri"].startswith("ui://")
-        assert tool.meta["fastmcp"]["app"] == "EventComposer"
+        assert tool.meta["fastmcp"]["app"] == "AppleCalendarUI"
 
     async def test_submit_handler_hidden_from_model(self, client):
         # 제출 핸들러(create_event_from_form)는 visibility=app 이라 모델 목록에 없어야 함
@@ -98,6 +98,17 @@ class TestMcpApp:
         assert '"Form"' in blob               # 폼 컴포넌트
         assert "toolCall" in blob             # 제출 → 도구 호출 배선
         assert "create_event_from_form" in blob  # 해시된 백엔드 도구명 포함
+
+    async def test_agenda_board_renders_without_permission(self, client):
+        # 읽기 보드는 권한이 없어도 크래시 없이 Prefab UI를 렌더해야 함
+        # (권한 없으면 데이터 대신 Alert 안내를 그림)
+        res = await client.call_tool("agenda_board", {})
+        sc = res.structured_content
+        assert "$prefab" in sc
+        blob = json.dumps(sc, ensure_ascii=False)
+        assert '"Metric"' in blob   # 요약 메트릭 카드
+        # 권한 유무와 무관하게: 데이터가 있으면 DataTable, 없으면 Alert/Text 중 하나
+        assert ('"DataTable"' in blob) or ('"Alert"' in blob) or ('"Text"' in blob)
 
 
 class TestInputValidation:
